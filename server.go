@@ -1,52 +1,70 @@
 package authserver
 
 import (
-	"net/http"
 	"os"
 
-	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
-	authorize "github.com/p1nant0m/gin-gin/controller/v1"
-	"github.com/p1nant0m/gin-gin/pkg/middleware/auth"
-	"github.com/p1nant0m/gin-gin/store/local"
+	"github.com/p1nant0m/gin-gin/config"
+	"github.com/p1nant0m/gin-gin/pkg/server"
+	genericAPIServer "github.com/p1nant0m/gin-gin/pkg/server"
 	"github.com/sirupsen/logrus"
 )
 
-func Run() {
+type authzServer struct {
+	genericAPIServer *server.GenericAPIServer
+}
+
+type preparedAuthzServer struct {
+	*authzServer
+}
+
+func CreateAuthzServer(cfg *config.Config) (*authzServer, error) {
+	genericConfig, err := buildGenericConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	genericAPIServer, err := genericConfig.Complete().New()
+	if err != nil {
+		return nil, err
+	}
+
+	authzServer := &authzServer{
+		genericAPIServer: genericAPIServer,
+	}
+
+	return authzServer, nil
+}
+
+func (s *authzServer) PrepareRun() preparedAuthzServer {
+	initRouter(s.genericAPIServer.Engine)
+
+	return preparedAuthzServer{s}
+}
+
+func buildGenericConfig(cfg *config.Config) (genericConfig *genericAPIServer.Config, lastErr error) {
+	genericConfig = genericAPIServer.NewConfig()
+
+	if lastErr = cfg.GenericServerRunoptions.ApplyTo(genericConfig); lastErr != nil {
+		return
+	}
+	if lastErr = cfg.TraceExporterOptions.ApplyTo(genericConfig); lastErr != nil {
+		return
+	}
+
+	return
+}
+
+func (s preparedAuthzServer) Run() error {
 	port := os.Getenv("PORT")
-	r := gin.Default()
 
 	if port == "" {
 		port = "8000"
 	}
 
-	logrus.SetLevel(logrus.DebugLevel)
-
-	authMiddleware := auth.NewJWTAuthMidleware()
-
-	r.POST("/login", authMiddleware.LoginHandler)
-
-	r.NoRoute(authMiddleware.MiddlewareFunc(), func(c *gin.Context) {
-		claims := jwt.ExtractClaims(c)
-		logrus.Printf("NoRoute claims: %#v\n", claims)
-		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Page not found"})
-	})
-
-	directIns, err := local.GetDirectLocalInsOr(local.GetLocalFactoryOrExit())
-	if err != nil {
-		logrus.Fatalln("get nil local instance")
+	if gin.Mode() == gin.DebugMode {
+		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	apiv1 := r.Group("/v1", authMiddleware.MiddlewareFunc())
-	{
-		// Refresh time can be longer than token timeout
-		apiv1.GET("/refresh_token", authMiddleware.RefreshHandler)
-
-		authzController := authorize.NewAuthzController(directIns)
-		apiv1.POST("/authz", authzController.Authorize)
-	}
-
-	if err := http.ListenAndServe(":"+port, r); err != nil {
-		logrus.Fatal(err)
-	}
+	return s.genericAPIServer.Engine.Run(":" + port)
 }

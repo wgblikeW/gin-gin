@@ -10,7 +10,6 @@ import (
 	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
 	userv1 "github.com/p1nant0m/gin-gin/pkg/api/v1"
-	"github.com/sirupsen/logrus"
 )
 
 type login struct {
@@ -74,8 +73,7 @@ func getPayloadFunc() PayloadFunc {
 
 func getAuthorizator() AuthorizatorFunc {
 	return func(data interface{}, c *gin.Context) bool {
-		if u, ok := data.(*userv1.User); ok {
-			logrus.Infof("user %s is authenticated.", u.UserName)
+		if _, ok := data.(*userv1.User); ok {
 			return true
 		}
 

@@ -6,8 +6,8 @@ import (
 
 	_ "embed"
 
+	"github.com/p1nant0m/gin-gin/log"
 	"github.com/p1nant0m/gin-gin/store"
-	"github.com/sirupsen/logrus"
 )
 
 type datastore struct {
@@ -45,11 +45,11 @@ func GetLocalFactoryOrExit() store.Factory {
 		}
 
 		localStorageFactory = &datastore{ls}
-		logrus.Info("localStorage has been created successfully")
+		log.Logger().Bg().Infof("localStorage has been created successfully\n", nil)
 	})
 
 	if localStorageFactory == nil {
-		logrus.Fatal("failed to get localStorage store factory")
+		log.Logger().Bg().Fatalf("failed to get localStorage store factory\n", nil)
 	}
 
 	return localStorageFactory
